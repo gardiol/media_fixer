@@ -156,10 +156,17 @@ do
 	mediainfo_value="${mediainfo_value% *}"
 	if [ $? -eq 0 ]
 	then
+		# remove blanks inside height string (since mediainfo will report 1080 as "1 080"):
+		mediainfo_value=${mediainfo_value//[[:space:]]/}
 		if [ "${mediainfo_value}" != "${VIDEO_HEIGHT}" ]
 		then
-			print_notice "Movie needs to be resized from '${mediainfo_value}' to '${VIDEO_HEIGHT}'..."
-			resize=1
+			if [ ${mediainfo_value} -gt ${VIDEO_HEIGHT} ]
+			then
+				print_notice "Movie needs to be resized from '${mediainfo_value}' to '${VIDEO_HEIGHT}'..."
+				resize=1
+			else
+				print_notice "Not resizing upward: '${mediainfo_value}' is smaller than '${VIDEO_HEIGHT}'."
+			fi
 		else 
 			print_notice "Video already at '${VIDEO_HEIGHT}' resolution."
 		fi
