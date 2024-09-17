@@ -13,6 +13,7 @@ VIDEO_CODEC="AV1"
 VIDEO_WIDTH="1280"
 VIDEO_HEIGHT="720"
 
+FFMPEG_EXTRA_OPTS="-fflags +genpts"
 FFMPEG_ENCODE="-c:v libsvtav1 -crf 38"
 FFMPEG_RESIZE="-vf scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}"
 
@@ -187,10 +188,10 @@ do
 			exec_command cp "${filename}" "${working_filename}" &>> "${LOG_FILE}"
 
 			if [ $change_container -eq 1 ]
-			then
+			then 
 				intermediate_filename="${stripped_filename}.tmuxed".${CONTAINER_EXTENSION}
 				print_notice "Transmuxing from '${working_filename}' to '${intermediate_filename}'..."
-				exec_command ffmpeg -nostdin -find_stream_info -i "${working_filename}" -map 0 -map -0:d -codec copy -codec:s srt "${intermediate_filename}" &>> "${LOG_FILE}"
+				exec_command ffmpeg -fflags +genpts -nostdin -find_stream_info -i "${working_filename}" -map 0 -map -0:d -codec copy -codec:s srt "${intermediate_filename}" &>> "${LOG_FILE}"
 				if [ $? -eq 0 ]
 				then
 					print_notice "Transmux ok."
@@ -221,7 +222,7 @@ do
 						ffmpeg_options="${ffmpeg_options} ${FFMPEG_RESIZE}"
 					fi
 
-					exec_command ffmpeg -nostdin -i "${source_filename}" ${ffmpeg_options} "${intermediate_filename}" &>> "${LOG_FILE}"
+					exec_command ffmpeg -fflags +genpts -nostdin -i "${source_filename}" ${ffmpeg_options} "${intermediate_filename}" &>> "${LOG_FILE}"
 					if [ $? -eq 0 ]
 					then
 						print_notice "Encoding ok."
