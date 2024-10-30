@@ -108,10 +108,45 @@ then
 	scan_path=$(pwd)
 fi
 
-# Scan folders / subfolders and file files...
-find . -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p' | {
-while read line
+create_queue=0
+queue_file="processing_queue"
+if [ -e ${queue_file} ]
+then
+	line=$(head -n 1 ${queue_file})
+	if [ "${line}" = "" ]
+	then
+		create_queue=1
+	fi
+else
+	create_queue=1
+fi
+
+if [ ${create_queue} -eq 1 ]
+then
+	# Scan folders / subfolders and file files...
+	print_notice "Calculating queues..."
+	for j in skipped failed completed
+	do
+		test -e ${queue_file}.${j} && rm ${queue_file}.{$j}
+	done
+	test -e ${queue_file} && rm ${queue_file}
+
+	find . -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p' | {
+	while read line
+	do
+		echo ${line} >> ${queue_file}
+	done
+	}
+fi
+
+print_notice "Queue has "$(cat ${queue_file} | wc -l)" videos to be processed..."
+read discard
+
+line=$(head -n 1 ${queue_file})
+while [ "${line}" != "" ]
 do
+	result=2 # 0= failed, 1= success, 2= skipped
+
 	change_container=0
 	encode=0
 	resize=0
@@ -177,6 +212,7 @@ do
 
 	if [ $change_container -eq 1 -o $encode -eq 1 -o $resize -eq 1 ]
 	then
+		result=0
 		print_notice "   Video needs to be processed."
 		(
 		print_notice "Relocating to path '${filepath}' for easier operations..."
@@ -244,6 +280,7 @@ do
 					exec_command mv "${working_filename}" "${destination_filename}" &>> "${LOG_FILE}"
 					if [ $? -eq 0 ]
 					then
+						result=1
 						if [ "${filename}" != "${destination_filename}" ]
 						then
 							print_notice "Removing original file..."
@@ -266,9 +303,23 @@ do
 		) 
 	fi # change container or encode
 
-done
+	print_notice "Moving processed file from processing queue..."
+	if [ ${result} -eq 1 ]
+	then
+		echo ${line} >> ${queue_file}.completed
+	elif [ ${result} -eq 2 ]
+	then
+		echo ${line} >> ${queue_file}.skipped
+	else
+		echo ${line} >> ${queue_file}.failed
+	fi
 
-}
+	# remove from queue
+	tail -n +2 ${queue_file} > ${queue_file}.cleaned
+	mv ${queue_file}.cleaned ${queue_file}
+	line=$(head -n 1 ${queue_file})
+
+done
 
 print_notice "All done."
 exit 0
