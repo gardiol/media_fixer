@@ -187,6 +187,17 @@ then
 	scan_path=$(pwd)
 fi
 
+# A few "queue files" are created:
+# ${queue_file}.temp         = store list of videos before they are analyzed
+#  ${queue_file}.skipped     = store videos that does not need to be converted
+#  ${queue_file}.failed      = store videos which failed to parse or convert
+#  ${queue_file}.completed   = store list of videos successfully converted
+#  ${queue_file}.in_progress = store list of video that needs (yet) to be converted
+#
+#  If the in_progress is present, and in_progress is not empty, videos will NOT be analyzed and searched again.
+#  This is useful to stop execution and restart later.
+#  If the in_progress file is missing or empty, the video search and analysis step is performed.
+#
 create_queue=0
 queue_file="processing_queue"
 if [ -e ${queue_file}.in_progress ]
@@ -200,9 +211,10 @@ else
 	create_queue=1
 fi
 
+# Perform video files search
 if [ ${create_queue} -eq 1 ]
 then
-	# Scan folders / subfolders and file files...
+	# Scan folders / subfolders to find video files...
 	print_notice "Calculating queues..."
 	for j in skipped failed completed in_progress temp
 	do
@@ -222,46 +234,51 @@ then
 		fi
 	done
 	}
-fi
 
-print_notice "Queue has "$(cat ${queue_file}.temp | wc -l)" videos to be analyzed..."
+	# Prevent error if no video files have been found
+	test -e ${queue_file}.temp || touch ${queue_file}.temp
 
-# Iterate all files...
-line=$(head -n 1 ${queue_file}.temp)
-while [ "${line}" != "" ]
-do
-	result=0
-	change_container=0
-	encode=0
-	resize=0
-	preprocess_video_file "${line}"
+	print_notice "Queue has "$(cat ${queue_file}.temp | wc -l)" videos to be analyzed..."
 
-	# Remove file from queue...
-	tail -n +2 ${queue_file}.temp > ${queue_file}.cleaned
-	mv ${queue_file}.cleaned ${queue_file}.temp
-
-	# Move file to appropriate new queue
-	if [ $result -eq 0 ]
-	then
-		# add file to failed queue
-		print_notice "Video '${line}' added to failed queue"
-		echo ${line} >> ${queue_file}.failed
-	elif [ $result -eq 2 ]
-	then
-		# add file to skipped queue
-		print_notice "Video '${line}' added to skipped queue"
-		echo ${line} >> ${queue_file}.skipped
-	elif [ $result -eq 1 ]
-	then
-		# add file to process queue
-		print_notice "Video '${line}' added to processing queue (${change_container} ${encode} ${resize})"
-		echo "${line}|||| ${change_container} ${encode} ${resize}" >> ${queue_file}.in_progress
-	else
-		print_notice "Invalid value of '$result' in result!"
-	fi
+	# Iterate all files in the temporary queue...
 	line=$(head -n 1 ${queue_file}.temp)
-done
+	while [ "${line}" != "" ]
+	do
+		result=0
+		change_container=0
+		encode=0
+		resize=0
+		preprocess_video_file "${line}"
+	
+		# Remove file from queue...
+		tail -n +2 ${queue_file}.temp > ${queue_file}.cleaned
+		mv ${queue_file}.cleaned ${queue_file}.temp
+	
+		# Move file to appropriate new queue
+		if [ $result -eq 0 ]
+		then
+			# add file to failed queue
+			print_notice "Video '${line}' added to failed queue"
+			echo ${line} >> ${queue_file}.failed
+		elif [ $result -eq 2 ]
+		then
+			# add file to skipped queue
+			print_notice "Video '${line}' added to skipped queue"
+			echo ${line} >> ${queue_file}.skipped
+		elif [ $result -eq 1 ]
+		then
+			# add file to process queue
+			print_notice "Video '${line}' added to processing queue (${change_container} ${encode} ${resize})"
+		echo "${line}|||| ${change_container} ${encode} ${resize}" >> ${queue_file}.in_progress
+		else
+			print_notice "Invalid value of '$result' in result!"
+		fi
+		line=$(head -n 1 ${queue_file}.temp)
+	done
+fi # rescan all video files
 
+
+# Prevent errors in the following if the various queue files have not been created
 test -e ${queue_file}.failed || touch ${queue_file}.failed
 test -e ${queue_file}.skipped || touch ${queue_file}.skipped
 test -e ${queue_file}.in_progress || touch ${queue_file}.in_progress
@@ -271,7 +288,7 @@ print_notice "Skipped queue has "$(cat ${queue_file}.skipped | wc -l)" videos."
 print_notice "Work queue has "$(cat ${queue_file}.in_progress | wc -l)" videos to be processed..."
 
 
-# Iterate all files...
+# Iterate the in_progress queue...
 line=$(head -n 1 ${queue_file}.in_progress)
 while [ "${line}" != "" ]
 do
