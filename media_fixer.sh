@@ -3,28 +3,41 @@
 # Publicly available at: https://github.com/gardiol/media_fixer
 # You can contact me at willy@gardiol.org
 
-TEST_ONLY=0
-DEBUG=1
-LOG_FILE="$(pwd)/media_fixer.log"
 
+# where is your "mediainfo" executable
+MEDIAINFO_EXE=$(which mediainfo)
+# where is your "ffmpeg" executable
+FFMPEG_EXE=$(which ffmpeg)
+CP_EXE=$(which cp)
+MV_EXE=$(which mv)
+RM_EXE=$(which rm)
+
+
+# Define how your videos needs to be converted to.
+#
+# Which container format to use
 CONTAINER="Matroska"
 CONTAINER_EXTENSION="mkv"
+# Which codec to use for re-encoding if needed
 VIDEO_CODEC="AV1"
+# Which video resolution to aim for
 VIDEO_WIDTH="1280"
 VIDEO_HEIGHT="720"
 
+# Additional FFMPEG specific settings
 FFMPEG_EXTRA_OPTS="-fflags +genpts"
 FFMPEG_ENCODE="-c:v libsvtav1 -crf 38"
 FFMPEG_RESIZE="-vf scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}"
-
-# Check valid log file
-test -z "${LOG_FILE}" && LOG_FILE=/dev/null
-test ${TEST_ONLY} -eq 1 && DEBUG=1
 
 # loggig, debugging and general print functions
 function print_debug
 {
 	test ${DEBUG} -eq 1 && echo ' [DEBUG] '$@  | tee -a "${LOG_FILE}"
+}
+
+function print_log
+{
+	echo $@ > "${LOG_FILE}"
 }
 
 function print_notice
@@ -48,7 +61,7 @@ function trim() {
 
 function exec_command
 {
-        print_notice "- running command: '""$@""'"
+        print_log "- running command: '""$@""'"
         if [ ${TEST_ONLY} -eq 1 ]
         then
                 print_notice " (command not executed because TEST_ONLY=1) "
@@ -67,7 +80,7 @@ function parse_mediainfo_output
 	local value=
 	local section_found=0
 	local row_found=0
-	export mediainfo_value=$(mediainfo "$filename" | while read line
+	export mediainfo_value=$("${MEDIAINFO_EXE}" "$filename" | while read line
 	do
 		if [ $section_found -eq 0 ]
 		then
@@ -177,16 +190,108 @@ function preprocess_video_file()
 	export resize=$l_resize
 }
 
+function print_usage()
+{
+	echo "Media Fixer - Reconvert your videos to your preferred container, codec and sizing"
+	echo "Usage:"
+	echo "   $0 [-l logfile] [-a] [-p path] [-q path] [-r prefix] [-t] [-d]"
+	echo "  -l logfile - use logfile as logfile (optional)"
+	echo "  -q path    - folder where the queue files will be stored (optional)"
+	echo "  -r prefix  - prefix to use for personalized queue filenames (optional)"
+	echo "  -a         - start from current folder to scan for videos"
+	echo "  -p path    - start from path to scan for videos"
+	echo "  -t         - force test mode on - default off (optional)"
+	echo "  -d         - force debug mode on - default off  (optional)"
+	echo " Either '-a' or '-p' must be present."
+	echo " If '-l' is omitted, the logfile will be in current folder and called 'media_fixed.log'"
+}
 
 ######### Begin of script #############
 
-scan_path=$1
-if [ -z "${scan_path}" ]
+#### Ensure needed executables do exist
+if [ "${MEDIAINFO_EXE}" = "" -o ! -e ${MEDIAINFO_EXE} ]
 then
-	print_notice "No path specified on command line... using current folder as default."
-	scan_path=$(pwd)
+	echo "ERROR: missing 'mediainfo' executable, please install the mediainfo package."
+	exit 255
 fi
 
+if [ "${FFMPEG_EXE}" = "" -o ! -e ${FFMPEG_EXE} ]
+then
+	echo "ERROR: missing 'ffmpeg' executable, please install the ffmpeg package."
+	exit 255
+fi
+
+SCAN_PATH="$(pwd)"
+QUEUE_PATH="${SCAN_PATH}"
+LOG_FILE="${SCAN_PATH}/media_fixer.log"
+PREFIX=""
+TEST_ONLY=0
+DEBUG=0
+if [ "$1" = "" ]
+then
+	print_usage
+	exit 2
+else
+	#### Parse commnand line
+	while getopts "hal:p:q:r:td" OPTION
+	do
+	        case $OPTION in
+	        l)
+			LOG_FILE="${OPTARG}"
+	                ;;
+		p)
+			SCAN_PATH="${OPTARG}"
+			;;
+		a)
+			;;
+		q)
+			QUEUE_PATH="${OPTARG}"
+			;;
+		r)
+			PREFIX="${OPTARG}"
+			;;
+		d)
+			DEBUG=1
+			;;
+		t)
+			TEST_ONLY=1
+			;;
+	        h|*)
+			print_usage
+	                exit 1
+	                ;;
+	        esac
+	done
+fi
+
+if [ ! -d ${SCAN_PATH} ]
+then
+	echo "ERROR: scan path '${SCAN_PATH}' does not exist!"
+	exit 254
+fi
+
+if [ ! -d ${QUEUE_PATH} ]
+then
+	echo "ERROR: custom queue path '${QUEUE_PATH}' does not exist!"
+	exit 254
+fi
+
+# Check valid log file
+test -z "${LOG_FILE}" && LOG_FILE=/dev/null
+test ${TEST_ONLY} -eq 1 && DEBUG=1
+
+# From now on, we can use the print_notice / print_debug etc functions...
+
+print_notice "Running Media Fixer on $(date)"
+print_notice "   Logfile: '${LOG_FILE}'"
+test ${TEST_ONLY} -eq 1 && print_notice "Running in TEST mode"
+test ${DEBUG} -eq 1 && print_notice "Running in DEBUG mode"
+print_notice "   Base path: '${SCAN_PATH}'"
+print_notice "   Queue path: '${QUEUE_PATH}'"
+
+# Move to SCAN_PATH...
+
+(cd ${SCAN_PATH} && {
 # A few "queue files" are created:
 # ${queue_file}.temp         = store list of videos before they are analyzed
 #  ${queue_file}.skipped     = store videos that does not need to be converted
@@ -199,7 +304,7 @@ fi
 #  If the in_progress file is missing or empty, the video search and analysis step is performed.
 #
 create_queue=0
-queue_file="processing_queue"
+queue_file="${QUEUE_PATH}/${PREFIX}processing_queue"
 if [ -e ${queue_file}.in_progress ]
 then
 	line=$(head -n 1 ${queue_file}.in_progress)
@@ -218,7 +323,7 @@ then
 	print_notice "Calculating queues..."
 	for j in skipped failed completed in_progress temp
 	do
-		test -e ${queue_file}.${j} && rm ${queue_file}.${j}
+		test -e ${queue_file}.${j} && "${RM_EXE}" ${queue_file}.${j}
 	done
 
 	find . -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p' | {
@@ -252,7 +357,7 @@ then
 	
 		# Remove file from queue...
 		tail -n +2 ${queue_file}.temp > ${queue_file}.cleaned
-		mv ${queue_file}.cleaned ${queue_file}.temp
+		"${MV_EXE}" ${queue_file}.cleaned ${queue_file}.temp
 	
 		# Move file to appropriate new queue
 		if [ $result -eq 0 ]
@@ -319,20 +424,20 @@ do
 			error=0
 			working_filename="${stripped_filename}.working"			
 			print_notice "Copying original to '${working_filename}'..."
-			exec_command cp "${filename}" "${working_filename}" &>> "${LOG_FILE}"
+			exec_command "${CP_EXE}" "${filename}" "${working_filename}" &>> "${LOG_FILE}"
 
 			if [ $change_container -eq 1 ]
 			then 
 				intermediate_filename="${stripped_filename}.tmuxed".${CONTAINER_EXTENSION}
 				print_notice "Transmuxing from '${working_filename}' to '${intermediate_filename}'..."
-				exec_command ffmpeg -fflags +genpts -nostdin -find_stream_info -i "${working_filename}" -map 0 -map -0:d -codec copy -codec:s srt "${intermediate_filename}" &>> "${LOG_FILE}"
+				exec_command "${FFMPEG_EXE}" -fflags +genpts -nostdin -find_stream_info -i "${working_filename}" -map 0 -map -0:d -codec copy -codec:s srt "${intermediate_filename}" &>> "${LOG_FILE}"
 				if [ $? -eq 0 ]
 				then
 					print_notice "Transmux ok."
-					exec_command mv "${intermediate_filename}" "${working_filename}" &>> "${LOG_FILE}"
+					exec_command "${MV_EXE}" "${intermediate_filename}" "${working_filename}" &>> "${LOG_FILE}"
 				else
 					print_error "Transmux failed!"
-					exec_command rm -f "${intermediate_filename}"
+					exec_command "${RM_EXE}" -f "${intermediate_filename}"
 					error=1
 				fi
 			fi # transmux
@@ -356,14 +461,14 @@ do
 						ffmpeg_options="${ffmpeg_options} ${FFMPEG_RESIZE}"
 					fi
 
-					exec_command ffmpeg -fflags +genpts -nostdin -i "${source_filename}" ${ffmpeg_options} "${intermediate_filename}"
+					exec_command "${FFMPEG_EXE}" -fflags +genpts -nostdin -i "${source_filename}" ${ffmpeg_options} "${intermediate_filename}"
 					if [ $? -eq 0 ]
 					then
 						print_notice "Encoding ok."
-						exec_command mv "${intermediate_filename}" "${working_filename}"
+						exec_command "${MV_EXE}" "${intermediate_filename}" "${working_filename}"
 					else
 						print_error "Encoding failed!"
-						exec_command rm -f "${intermediate_filename}"
+						exec_command "${RM_EXE}" -f "${intermediate_filename}"
 						error=1
 					fi
 				fi # encore or resize
@@ -375,14 +480,14 @@ do
 				then
 					destination_filename="${stripped_filename}.${CONTAINER_EXTENSION}"
 					print_notice "Moving final product from '${working_filename}' to '${destination_filename}'..."
-					exec_command mv "${working_filename}" "${destination_filename}"
+					exec_command "${MV_EXE}" "${working_filename}" "${destination_filename}"
 					if [ $? -eq 0 ]
 					then
 						result=1
 						if [ "${filename}" != "${destination_filename}" ]
 						then
 							print_notice "Removing original file..."
-							exec_command rm -f "${filename}"
+							exec_command "${RM_EXE}" -f "${filename}"
 						else
 							print_notice "Original file has been replaced with converted file."
 						fi
@@ -412,10 +517,12 @@ do
 
 	# remove from queue
 	tail -n +2 ${queue_file}.in_progress > ${queue_file}.cleaned
-	mv ${queue_file}.cleaned ${queue_file}.in_progress
+	"${MV_EXE}" ${queue_file}.cleaned ${queue_file}.in_progress
 	line=$(head -n 1 ${queue_file}.in_progress)
 
 done
+
+}) # moved to SCAN_PATH
 
 print_notice "All done."
 exit 0
