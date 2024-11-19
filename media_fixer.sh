@@ -50,6 +50,84 @@ function print_error
 	echo ' [ERROR] '$@ | tee -a "${LOG_FILE}"
 }
 
+__print_wait_state=0
+function print_wait
+{
+	local c=""
+	if [ ${__print_wait_state} -eq 0 ]
+	then
+		c="[.                 ]"
+	elif  [ ${__print_wait_state} -eq 1 ]
+	then
+		c="[..                ]"
+	elif  [ ${__print_wait_state} -eq 2 ]
+	then
+		c="[...               ]"
+	elif  [ ${__print_wait_state} -eq 3 ]
+	then
+		c="[....              ]"
+	elif  [ ${__print_wait_state} -eq 4 ]
+	then
+		c="[ ....             ]"
+	elif  [ ${__print_wait_state} -eq 5 ]
+	then
+		c="[  ....            ]"
+	elif  [ ${__print_wait_state} -eq 6 ]
+	then
+		c="[   ....           ]"
+	elif  [ ${__print_wait_state} -eq 7 ]
+	then
+		c="[    ....          ]"
+	elif  [ ${__print_wait_state} -eq 8 ]
+	then
+		c="[     ....         ]"
+	elif  [ ${__print_wait_state} -eq 9 ]
+	then
+		c="[      ....        ]"
+	elif  [ ${__print_wait_state} -eq 10 ]
+	then
+		c="[       ....       ]"
+	elif  [ ${__print_wait_state} -eq 11 ]
+	then
+		c="[        ....      ]"
+	elif  [ ${__print_wait_state} -eq 12 ]
+	then
+		c="[         ....     ]"
+	elif  [ ${__print_wait_state} -eq 13 ]
+	then
+		c="[          ....    ]"
+	elif  [ ${__print_wait_state} -eq 14 ]
+	then
+		c="[           ....   ]"
+	elif  [ ${__print_wait_state} -eq 15 ]
+	then
+		c="[            ....  ]"
+	elif  [ ${__print_wait_state} -eq 16 ]
+	then
+		c="[             .... ]"
+	elif  [ ${__print_wait_state} -eq 17 ]
+	then
+		c="[              ....]"
+	elif  [ ${__print_wait_state} -eq 18 ]
+	then
+		c="[               ...]"
+	elif  [ ${__print_wait_state} -eq 19 ]
+	then
+		c="[                ..]"
+	elif  [ ${__print_wait_state} -eq 20 ]
+	then
+		c="[                 .]"
+	elif  [ ${__print_wait_state} -eq 21 ]
+	then
+		c="[                  ]"
+	else
+		c="[.                 ]"
+		__print_wait_state=0
+	fi
+	echo -ne "${c}"  \\r
+	__print_wait_state=$(( __print_wait_state+1 ))
+}
+
 function trim() {
     local var="$*"
     # remove leading whitespace characters
@@ -301,6 +379,9 @@ test -z "${LOG_FILE}" && LOG_FILE=/dev/null
 
 # From now on, we can use the print_notice / print_log etc functions...
 
+print_notice " ^a "
+print_notice " ^b "
+print_notice " ^c "
 print_notice "Running Media Fixer on $(date)"
 print_notice "   Logfile: '${LOG_FILE}'"
 test ${TEST_ONLY} -eq 1 && print_notice "Running in TEST mode"
@@ -347,9 +428,12 @@ then
 		echo -n > ${queue_file}.${j}
 	done
 
+	print_wait
 	find . -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p' | {
 	while read line
 	do
+		# write a nice running thingy
+	        print_wait
 		# temp files end with ".working", those needs to be ignored
 		is_temp=${line%working}
 		if [ "${line%working}" = "${line}" ]
@@ -544,5 +628,8 @@ done
 }) # moved to SCAN_PATH
 
 print_notice "All done."
+print_notice " ^x "
+print_notice " ^y "
+print_notice " ^z "
 exit 0
 
