@@ -278,15 +278,16 @@ function print_usage()
 {
 	echo "Media Fixer - Reconvert your videos to your preferred container, codec and sizing"
 	echo "Usage:"
-	echo "   $0 [-l logfile] [-a] [-p path] [-q path] [-r prefix] [-t] [-f] [-d]"
+	echo "   $0 [-l logfile] [-a] [-p path] [-q path] [-r prefix] [-t] [-f] [-d] [-x]"
 	echo "  -l logfile - use logfile as logfile (optional)"
 	echo "  -q q-path  - folder where the queue files will be stored (optional)"
 	echo "  -r prefix  - prefix to use for personalized queue filenames (optional)"
 	echo "  -a         - start from current folder to scan for videos"
 	echo "  -p path    - start from path to scan for videos"
 	echo "  -t         - force test mode on - default off (optional)"
-	echo "  -f         - force queue analysis (optional)"
+	echo "  -f         - force queue analysis, cannot be enabled with -x"
 	echo "  -d         - delete old temporary files when found (optional)"
+	echo "  -x         - retry all failed conversions, cannot be enabled with -f"
 	echo " Either '-a' or '-p' must be present."
 	echo " If '-l' is omitted, the logfile will be in current folder and called 'mediafixer.log'"
 	echo " The queue files are the following:"
@@ -322,18 +323,23 @@ PREFIX=""
 TEST_ONLY=0
 FORCE_SCAN=0
 DELETE_OLD_TEMP=0
+RESUME_FAILED=0
 if [ "$1" = "" ]
 then
 	print_usage
 	exit 2
 else
 	#### Parse commnand line
-	while getopts "hal:p:q:r:tfd" OPTION
+	while getopts "hal:p:q:r:tfdx" OPTION
 	do
 	        case $OPTION in
 	        l)
 			LOG_FILE="${OPTARG}"
 	                ;;
+		x)
+			RESUME_FAILED=1
+			FORCE_SCAN=0
+			;;
 		d)
 			DELETE_OLD_TEMP=1
 			;;
@@ -342,6 +348,7 @@ else
 			;;
 		f)
 			FORCE_SCAN=1
+			RESUME_FAILED=0
 			;;
 		a)
 			;;
@@ -386,6 +393,7 @@ print_notice "Running Media Fixer on $(date)"
 print_notice "   Logfile: '${LOG_FILE}'"
 test ${TEST_ONLY} -eq 1 && print_notice "Running in TEST mode"
 test ${FORCE_SCAN} -eq 1 && print_notice "Forced scan of videos"
+test ${RESUME_FAILED} -eq 1 && print_notice "Will retry all failed processing"
 test ${DELETE_OLD_TEMP} -eq 1 && print_notice "Stale temporary files will be deleted"
 print_notice "   Base path: '${SCAN_PATH}'"
 print_notice "   Queue path: '${QUEUE_PATH}'"
@@ -401,6 +409,14 @@ print_notice "   Queue path: '${QUEUE_PATH}'"
 
 create_queue=0
 queue_file="${QUEUE_PATH}/${PREFIX}mediafixer_queue"
+
+if [ ${RESUME_FAILED} -eq 1 ]
+then
+	test -e ${queue_file}.failed && {
+		cat ${queue_file}.failed >> ${queue_file}.in_progress
+		${RM_EXE} ${queue_file}.failed
+	}
+fi
 
 if [ ${FORCE_SCAN} -eq 0 ]
 then
@@ -617,7 +633,7 @@ do
 	then
 		echo ${line} >> ${queue_file}.completed
 	else
-		echo ${full_filename} >> ${queue_file}.failed
+		echo ${line} >> ${queue_file}.failed
 	fi
 
 	# remove from queue
