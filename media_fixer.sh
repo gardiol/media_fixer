@@ -50,6 +50,12 @@ function print_error
 	echo ' [ERROR] '$@ | tee -a "${LOG_FILE}"
 }
 
+function print_overwrite()
+{
+	local line="$@"
+	echo -ne "${line}" \\r
+}
+
 __print_wait_state=0
 function print_wait
 {
@@ -124,7 +130,7 @@ function print_wait
 		c="[.                 ]"
 		__print_wait_state=0
 	fi
-	echo -ne "${c}"  \\r
+	print_overwrite "${c}"
 	__print_wait_state=$(( __print_wait_state+1 ))
 }
 
@@ -278,7 +284,7 @@ function print_usage()
 {
 	echo "Media Fixer - Reconvert your videos to your preferred container, codec and sizing"
 	echo "Usage:"
-	echo "   $0 [-l logfile] [-a] [-p path] [-q path] [-r prefix] [-t] [-f] [-d] [-x]"
+	echo "   $0 [-l logfile] [-a] [-p path] [-q path] [-r prefix] [-t] [-f] [-d] [-x] [-s] [-i]"
 	echo "  -l logfile - use logfile as logfile (optional)"
 	echo "  -q q-path  - folder where the queue files will be stored (optional)"
 	echo "  -r prefix  - prefix to use for personalized queue filenames (optional)"
@@ -288,6 +294,8 @@ function print_usage()
 	echo "  -f         - force queue analysis, cannot be enabled with -x"
 	echo "  -d         - delete old temporary files when found (optional)"
 	echo "  -x         - retry all failed conversions, cannot be enabled with -f"
+	echo "  -s         - only clean stale files and exit (not compatible with -p or -a)"
+	echo "  -i         - wait interactively for confirmation before starting conversions"
 	echo " Either '-a' or '-p' must be present."
 	echo " If '-l' is omitted, the logfile will be in current folder and called 'mediafixer.log'"
 	echo " The queue files are the following:"
@@ -323,6 +331,8 @@ PREFIX=""
 TEST_ONLY=0
 FORCE_SCAN=0
 DELETE_OLD_TEMP=0
+ONLY_DELETE_OLD_TEMP=0
+INTERACTIVE=0
 RESUME_FAILED=0
 if [ "$1" = "" ]
 then
@@ -330,12 +340,15 @@ then
 	exit 2
 else
 	#### Parse commnand line
-	while getopts "hal:p:q:r:tfdx" OPTION
+	while getopts "hal:p:q:r:tfdxis" OPTION
 	do
 	        case $OPTION in
 	        l)
 			LOG_FILE="${OPTARG}"
 	                ;;
+		i)
+			INTERACTIVE=1
+			;;
 		x)
 			RESUME_FAILED=1
 			FORCE_SCAN=0
@@ -343,14 +356,22 @@ else
 		d)
 			DELETE_OLD_TEMP=1
 			;;
+		s)
+			FORCE_SCAN=1
+			DELETE_OLD_TEMP=1
+			ONLY_DELETE_OLD_TEMP=1
+			RESUME_FAILED=0
+			;;
 		p)
 			SCAN_PATH="${OPTARG}"
+			ONLY_DELETE_OLD_TEMP=0
 			;;
 		f)
 			FORCE_SCAN=1
 			RESUME_FAILED=0
 			;;
 		a)
+			ONLY_DELETE_OLD_TEMP=0
 			;;
 		q)
 			QUEUE_PATH="${OPTARG}"
@@ -395,6 +416,8 @@ test ${TEST_ONLY} -eq 1 && print_notice "Running in TEST mode"
 test ${FORCE_SCAN} -eq 1 && print_notice "Forced scan of videos"
 test ${RESUME_FAILED} -eq 1 && print_notice "Will retry all failed processing"
 test ${DELETE_OLD_TEMP} -eq 1 && print_notice "Stale temporary files will be deleted"
+test ${ONLY_DELETE_OLD_TEMP} -eq 1 && print_notice "Quit after deleting temp files"
+test ${INTERACTIVE} -eq 1 && print_notice "Interctively wait for confirmation before conversion"
 print_notice "   Base path: '${SCAN_PATH}'"
 print_notice "   Queue path: '${QUEUE_PATH}'"
 
@@ -437,7 +460,7 @@ fi
 # Perform video files search
 if [ ${create_queue} -eq 1 ]
 then
-	# Scan folders / subfolders to find video files...
+	# Scan for old temp file Scan folders / subfolders to find video files...
 	print_notice "Building video queues, this can take a while, be patient..."
 	for j in skipped failed completed in_progress temp leftovers
 	do
@@ -450,9 +473,9 @@ then
 	do
 		# write a nice running thingy
 	        print_wait
-		# temp files end with ".working", those needs to be ignored
-		is_temp=${line%working}
-		if [ "${line%working}" = "${line}" ]
+		# temp files end with ".gc", those needs to be ignored
+		is_temp=${line%gc}
+		if [ "${line%gc}" = "${line}" ]
 		then
 			echo ${line} >> ${queue_file}.temp
 		else
@@ -467,6 +490,12 @@ then
 		fi
 	done
 	}
+
+	if [ ${ONLY_DELETE_OLD_TEMP} -eq 1 ]
+	then
+		print_notice "Only delete temporary files: terminating operations."
+		exit 0
+	fi
 
 	print_notice "Queue has "$(count_lines ${queue_file}.temp)" videos to be analyzed..."
 
@@ -507,6 +536,12 @@ print_notice "Failed queue has "$(count_lines ${queue_file}.failed)" videos."
 print_notice "Skipped queue has "$(count_lines ${queue_file}.skipped)" videos."
 print_notice "Work queue has ${TOTAL_WORK_LINES} videos to be processed..."
 
+if [ ${INTERACTIVE} -eq 1 ]
+then
+	echo "Ready to go? Press RETURN to start, or CTRL+C to abord."
+	read dummy
+fi
+
 # Iterate the in_progress queue...
 line=$(queue_pop_line ${queue_file}.in_progress)
 while [ "${line}" != "" ]
@@ -536,20 +571,20 @@ do
 		if cd "${filepath}"
 		then
 			error=0
-			working_filename="${stripped_filename}.working"			
-			print_log "Copying original to '${working_filename}'..."
-			exec_command "${CP_EXE}" "${filename}" "${working_filename}" &>> "${LOG_FILE}"
+			gc_filename="${stripped_filename}.mediafixer_working"			
+			print_log "Copying original to '${gc_filename}'..."
+			exec_command "${CP_EXE}" "${filename}" "${gc_filename}" &>> "${LOG_FILE}"
 
 			if [ $change_container -eq 1 ]
 			then 
 				intermediate_filename="${stripped_filename}.tmuxed".${CONTAINER_EXTENSION}
 				print_notice_nonl "Transmuxing..."
-				print_log "Transmuxing from '${working_filename}' to '${intermediate_filename}'..."
-				exec_command "${FFMPEG_EXE}" -fflags +genpts -nostdin -find_stream_info -i "${working_filename}" -map 0 -map -0:d -codec copy -codec:s srt "${intermediate_filename}" &>> "${LOG_FILE}"
+				print_log "Transmuxing from '${gc_filename}' to '${intermediate_filename}'..."
+				exec_command "${FFMPEG_EXE}" -fflags +genpts -nostdin -find_stream_info -i "${gc_filename}" -map 0 -map -0:d -codec copy -codec:s srt "${intermediate_filename}" &>> "${LOG_FILE}"
 				if [ $? -eq 0 ]
 				then
 					print_notice_nonl " done. "
-					exec_command "${MV_EXE}" "${intermediate_filename}" "${working_filename}" &>> "${LOG_FILE}"
+					exec_command "${MV_EXE}" "${intermediate_filename}" "${gc_filename}" &>> "${LOG_FILE}"
 				else
 					print_notice_nonl " failed! "
 					exec_command "${RM_EXE}" -f "${intermediate_filename}"
@@ -561,7 +596,7 @@ do
 			then
 				if [ $encode -eq 1 -o $resize -eq 1 ]
 				then
-					source_filename="${working_filename}"
+					source_filename="${gc_filename}"
 					intermediate_filename="${stripped_filename}.encoded".${CONTAINER_EXTENSION}
 					print_notice_nonl "Encoding..."
 					print_log "Encoding from '${source_filename}' to '${intermediate_filename}'" 
@@ -581,7 +616,7 @@ do
 					if [ $? -eq 0 ]
 					then
 						print_notice_nonl " done. "
-						exec_command "${MV_EXE}" "${intermediate_filename}" "${working_filename}"
+						exec_command "${MV_EXE}" "${intermediate_filename}" "${gc_filename}"
 					else
 						print_notice_nonl " failed! "
 						exec_command "${RM_EXE}" -f "${intermediate_filename}"
@@ -595,11 +630,11 @@ do
 
 			if [ $error -eq 0 ]
 			then
-				if [ -e "${working_filename}" ]
+				if [ -e "${gc_filename}" ]
 				then
 					destination_filename="${stripped_filename}.${CONTAINER_EXTENSION}"
-					print_log "Moving final product from '${working_filename}' to '${destination_filename}'..."
-					exec_command "${MV_EXE}" "${working_filename}" "${destination_filename}"
+					print_log "Moving final product from '${gc_filename}' to '${destination_filename}'..."
+					exec_command "${MV_EXE}" "${gc_filename}" "${destination_filename}"
 					if [ $? -eq 0 ]
 					then
 						result=1
@@ -614,7 +649,7 @@ do
 						print_error "Unable to move converted file, not deleting original."
 					fi
 				else
-					print_error "Missing working file '${working_filename}', something went wrong!"
+					print_error "Missing gc file '${working_filename}', something went wrong!"
 				fi
 			else
 				print_error "Something went wrong in conversion."
