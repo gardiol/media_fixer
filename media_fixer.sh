@@ -16,18 +16,62 @@ RM_EXE=$(which rm)
 # Define how your videos needs to be converted to.
 #
 # Which container format to use
-CONTAINER="Matroska"
-CONTAINER_EXTENSION="mkv"
+if [ "${MEDIAFIXER_CONTAINER}" != "" ]
+	CONTAINER="${MEDIAFIXER_CONTAINER}"
+else
+	CONTAINER="Matroska"
+fi
+
+if [ "${MEDIAFIXER_CONTAINER_EXTENSION}" != "" ]
+then
+	CONTAINER_EXTENSION="${MEDIAFIXER_CONTAINER_EXTENSION}"
+else
+	CONTAINER_EXTENSION="mkv"
+fi
+
 # Which codec to use for re-encoding if needed
-VIDEO_CODEC="AV1"
+if [ "${MEDIAFIXER_VIDEO_CODEC}" != "" ]
+then
+	VIDEO_CODEC="${MEDIAFIXER_VIDEO_CODEC}"
+else
+	VIDEO_CODEC="AV1"
+fi
+
 # Which video resolution to aim for
-VIDEO_WIDTH="1280"
-VIDEO_HEIGHT="720"
+if [ "${MEDIAFIXER_VIDEO_WIDTH}" != "" ]
+then
+	VIDEO_WIDTH="${MEDIAFIXER_VIDEO_WIDTH}"
+else
+	VIDEO_WIDTH="1280"
+fi
+if [ "${MEDIAFIXER_VIDEO_HEIGHT}" != "" ]
+then
+	VIDEO_HEIGHT="${MEDIAFIXER_VIDEO_HEIGHT}"
+else
+	VIDEO_HEIGHT="720"
+fi
 
 # Additional FFMPEG specific settings
-FFMPEG_EXTRA_OPTS="-fflags +genpts"
-FFMPEG_ENCODE="-c:v libsvtav1 -crf 38"
-FFMPEG_RESIZE="-vf scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}"
+if [ "${MEDIAFIXER_FFMPEG_EXTRA_OPTS}" != "" ]
+then
+	FFMPEG_EXTRA_OPTS="${MEDIAFIXER_FFMPEG_EXTRA_OPTS}"
+else
+	FFMPEG_EXTRA_OPTS="-fflags +genpts"
+fi
+
+if [ "${MEDIAFIXER_FFMPEG_ENCODE}" != "" ]
+then
+	FFMPEG_ENCODE="${MEDIAFIXER_FFMPEG_ENCODE}"
+else
+	FFMPEG_ENCODE="-c:v libsvtav1 -crf 38"
+fi
+
+if [ "${MEDIAFIXER_FFMPEG_RESIZE}" != "" ]
+then
+	FFMPEG_RESIZE="${MEDIAFIXER_FFMPEG_RESIZE}"
+else
+	FFMPEG_RESIZE="-vf scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}"
+fi
 
 # loggig and general print functions
 function print_log
