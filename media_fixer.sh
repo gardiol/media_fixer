@@ -17,6 +17,7 @@ RM_EXE=$(which rm)
 #
 # Which container format to use
 if [ "${MEDIAFIXER_CONTAINER}" != "" ]
+then
 	CONTAINER="${MEDIAFIXER_CONTAINER}"
 else
 	CONTAINER="Matroska"
@@ -343,7 +344,6 @@ function print_usage()
 	echo " Either '-a' or '-p' must be present."
 	echo " If '-l' is omitted, the logfile will be in current folder and called 'mediafixer.log'"
 	echo " The queue files are the following:"
-	echo "   [q-path/]prefix]mediafixer_queue.temp        = store list of videos before they are analyzed"
 	echo "   [q-path/]prefix]mediafixer_queue.skipped     = store list of videos that don't need to be processed"
 	echo "   [q-path/]prefix]mediafixer_queue.failed      = store list of videos that failed conversion"
 	echo "   [q-path/]prefix]mediafixer_queue.completed   = store list of videos successfully converted"
@@ -512,16 +512,41 @@ then
 	done
 
 	print_wait
+	counter=0
 	find . -type f -exec file -N -i -- {} + | sed -n 's!: video/[^:]*$!!p' | {
 	while read line
 	do
+		counter=$(( counter+1 ))
 		# write a nice running thingy
 	        print_wait
-		# temp files end with ".gc", those needs to be ignored
-		is_temp=${line%gc}
-		if [ "${line%gc}" = "${line}" ]
+		# stale temp files end with "mediafixer_working"
+		if [ "${line%mediafixer_working}" = "${line}" ]
 		then
-			echo ${line} >> ${queue_file}.temp
+			if [ ${ONLY_DELETE_OLD_TEMP} -eq 0 ]
+			then
+				result=0
+				change_container=0
+				encode=0
+				resize=0
+				preprocess_video_file "${line}"
+	
+				# Move file to appropriate new queue
+				if [ $result -eq 0 ]
+				then
+					print_log "Video '${line}' added to failed queue"
+					echo ${line} >> ${queue_file}.failed
+				elif [ $result -eq 2 ]
+				then
+					print_log "Video '${line}' added to skipped queue"
+					echo ${line} >> ${queue_file}.skipped
+				elif [ $result -eq 1 ]
+				then
+					print_log "Video '${line}' added to processing queue (${change_container} ${encode} ${resize})"
+					echo "${line}|||| ${change_container} ${encode} ${resize}" >> ${queue_file}.in_progress
+				else
+					print_error "Invalid value of '$result' in result!"
+				fi
+			fi
 		else
 			if [ ${DELETE_OLD_TEMP} -eq 0 ]
 			then
@@ -535,42 +560,12 @@ then
 	done
 	}
 
+	print_notice "Analyzed ${counter} videos."
 	if [ ${ONLY_DELETE_OLD_TEMP} -eq 1 ]
 	then
 		print_notice "Only delete temporary files: terminating operations."
 		exit 0
 	fi
-
-	print_notice "Queue has "$(count_lines ${queue_file}.temp)" videos to be analyzed..."
-
-	# Iterate all files in the temporary queue...
-	line=$(queue_pop_line ${queue_file}.temp)
-	while [ "${line}" != "" ]
-	do
-		result=0
-		change_container=0
-		encode=0
-		resize=0
-		preprocess_video_file "${line}"
-	
-		# Move file to appropriate new queue
-		if [ $result -eq 0 ]
-		then
-			print_log "Video '${line}' added to failed queue"
-			echo ${line} >> ${queue_file}.failed
-		elif [ $result -eq 2 ]
-		then
-			print_log "Video '${line}' added to skipped queue"
-			echo ${line} >> ${queue_file}.skipped
-		elif [ $result -eq 1 ]
-		then
-			print_log "Video '${line}' added to processing queue (${change_container} ${encode} ${resize})"
-			echo "${line}|||| ${change_container} ${encode} ${resize}" >> ${queue_file}.in_progress
-		else
-			print_error "Invalid value of '$result' in result!"
-		fi
-		line=$(queue_pop_line ${queue_file}.temp)
-	done
 fi # rescan all video files
 
 
