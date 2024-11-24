@@ -461,7 +461,7 @@ test ${FORCE_SCAN} -eq 1 && print_notice "Forced scan of videos"
 test ${RESUME_FAILED} -eq 1 && print_notice "Will retry all failed processing"
 test ${DELETE_OLD_TEMP} -eq 1 && print_notice "Stale temporary files will be deleted"
 test ${ONLY_DELETE_OLD_TEMP} -eq 1 && print_notice "Quit after deleting temp files"
-test ${INTERACTIVE} -eq 1 && print_notice "Interctively wait for confirmation before conversion"
+test ${INTERACTIVE} -eq 1 && print_notice "Interactively wait for confirmation before conversion"
 print_notice "   Base path: '${SCAN_PATH}'"
 print_notice "   Queue path: '${QUEUE_PATH}'"
 
