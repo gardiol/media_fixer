@@ -243,15 +243,15 @@ function parse_mediainfo_output
 function count_lines()
 {
 	local filename="$1"
-	cat ${filename} | wc -l
+	cat "${filename}" | wc -l
 }
 
 function queue_pop_line()
 {
 	local filename="$1"
-	local line=$(head -n 1 ${filename})
-	tail -n +2 ${filename} > ${filename}.removal_in_progress
-	"${MV_EXE}" ${filename}.removal_in_progress ${filename}
+	local line=$(head -n 1 "${filename}")
+	tail -n +2 "${filename}" > "${filename}".removal_in_progress
+	"${MV_EXE}" "${filename}".removal_in_progress "${filename}"
 	echo ${line}
 }
 
@@ -434,7 +434,7 @@ else
 	done
 fi
 
-if [ ! -d ${SCAN_PATH} ]
+if [ ! -d "${SCAN_PATH}" ]
 then
 	echo "ERROR: scan path '${SCAN_PATH}' does not exist!"
 	exit 254
@@ -467,7 +467,7 @@ print_notice "   Queue path: '${QUEUE_PATH}'"
 
 # Move to SCAN_PATH...
 
-(cd ${SCAN_PATH} && {
+(cd "${SCAN_PATH}" && {
 #
 #  If the in_progress is present, and in_progress is not empty, videos will NOT be analyzed and searched again.
 #  This is useful to stop execution and restart later.
@@ -479,17 +479,17 @@ queue_file="${QUEUE_PATH}/${PREFIX}mediafixer_queue"
 
 if [ ${RESUME_FAILED} -eq 1 ]
 then
-	test -e ${queue_file}.failed && {
-		cat ${queue_file}.failed >> ${queue_file}.in_progress
-		${RM_EXE} ${queue_file}.failed
+	test -e "${queue_file}".failed && {
+		cat "${queue_file}".failed >> "${queue_file}".in_progress
+		${RM_EXE} "${queue_file}".failed
 	}
 fi
 
 if [ ${FORCE_SCAN} -eq 0 ]
 then
-	if [ -e ${queue_file}.in_progress ]
+	if [ -e "${queue_file}".in_progress ]
 	then
-		line=$(head -n 1 ${queue_file}.in_progress)
+		line=$(head -n 1 "${queue_file}".in_progress)
 		if [ "${line}" = "" ]
 		then
 			create_queue=1
@@ -508,7 +508,7 @@ then
 	print_notice "Building video queues, this can take a while, be patient..."
 	for j in skipped failed completed in_progress temp leftovers
 	do
-		echo -n > ${queue_file}.${j}
+		echo -n > "${queue_file}".${j}
 	done
 
 	print_wait
@@ -534,15 +534,15 @@ then
 				if [ $result -eq 0 ]
 				then
 					print_log "Video '${line}' added to failed queue"
-					echo ${line} >> ${queue_file}.failed
+					echo ${line} >> "${queue_file}".failed
 				elif [ $result -eq 2 ]
 				then
 					print_log "Video '${line}' added to skipped queue"
-					echo ${line} >> ${queue_file}.skipped
+					echo ${line} >> "${queue_file}".skipped
 				elif [ $result -eq 1 ]
 				then
 					print_log "Video '${line}' added to processing queue (${change_container} ${encode} ${resize})"
-					echo "${line}|||| ${change_container} ${encode} ${resize}" >> ${queue_file}.in_progress
+					echo "${line}|||| ${change_container} ${encode} ${resize}" >> "${queue_file}".in_progress
 				else
 					print_error "Invalid value of '$result' in result!"
 				fi
@@ -551,7 +551,7 @@ then
 			if [ ${DELETE_OLD_TEMP} -eq 0 ]
 			then
 				print_error "Skipping file '${line}' because it seems a temporary file, you should maybe delete it?"
-				echo ${line} >> ${queue_file}.leftovers
+				echo ${line} >> "${queue_file}".leftovers
 			else
 				print_log "Removing stale temporary file '${line}'"
 				${RM_EXE} "${line}"
@@ -569,10 +569,10 @@ then
 fi # rescan all video files
 
 
-TOTAL_WORK_LINES=$(count_lines ${queue_file}.in_progress)
+TOTAL_WORK_LINES=$(count_lines "${queue_file}".in_progress)
 WORKING_LINES=1
-print_notice "Failed queue has "$(count_lines ${queue_file}.failed)" videos."
-print_notice "Skipped queue has "$(count_lines ${queue_file}.skipped)" videos."
+print_notice "Failed queue has "$(count_lines "${queue_file}".failed)" videos."
+print_notice "Skipped queue has "$(count_lines "${queue_file}".skipped)" videos."
 print_notice "Work queue has ${TOTAL_WORK_LINES} videos to be processed..."
 
 if [ ${INTERACTIVE} -eq 1 ]
@@ -582,7 +582,7 @@ then
 fi
 
 # Iterate the in_progress queue...
-line=$(queue_pop_line ${queue_file}.in_progress)
+line=$(queue_pop_line "${queue_file}".in_progress)
 while [ "${line}" != "" ]
 do
 
@@ -705,13 +705,13 @@ do
 	print_log "Removing processed file from processing queue..."
 	if [ ${result} -eq 1 ]
 	then
-		echo ${line} >> ${queue_file}.completed
+		echo ${line} >> "${queue_file}".completed
 	else
-		echo ${line} >> ${queue_file}.failed
+		echo ${line} >> "${queue_file}".failed
 	fi
 
 	# remove from queue
-	line=$(queue_pop_line ${queue_file}.in_progress)
+	line=$(queue_pop_line "${queue_file}".in_progress)
 
 done
 
