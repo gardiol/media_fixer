@@ -108,7 +108,11 @@ Resizing is done when the original video is not in the requested size.
 Since it make no sense to resize upward, from a smaller video resolution to a bigger one, Media Fixer will **not** resize a smaller video to a bigger size. At the same time, any resising wull never change the aspect ratio of the video. The resizing is focused on the y-resolution (1080p, 720p, 480p, etc) for this reason. If you need to alter the aspect ratio, you need to cusotmize your ffmpeg options with the environment variables above.
 
 
+## Issues
 
+ffmpeg can and will fail during transcoding if the video or audio format is not compatible with your desider container. Some are better than other, check the error messages carefully and try to re-encode your video or audio before using this script, or change destination container type.
+
+I also had issues with very weird filenames with grangely places spaces, it seems to confuse even the shell. In this case, check your filenames and try to make them more logical. The worse case i found was misplaced spaces in places where they **should** have worked, but it didnt. Well, there might be issues with how i handle the filenames in the script maybe, but it seems to be working il 99.9% of cases, so if you find a fix, let me know.
 
 ----
 
