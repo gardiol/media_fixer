@@ -255,6 +255,21 @@ function queue_pop_line()
 	echo ${line}
 }
 
+function is_in_queue()
+{
+	local file="$2"
+	local file_found=0
+	local line=
+	while read line
+	do
+		if [ "${line%||||*}" = "$2" ]
+		then
+			file_found=1
+		fi
+	done < "$1"
+	export found=$file_found
+}
+
 function preprocess_video_file()
 {
 	local full_filename="$*"
@@ -349,6 +364,7 @@ function print_usage()
 	echo "   [q-path/]prefix]mediafixer_queue.completed   = store list of videos successfully converted"
 	echo "   [q-path/]prefix]mediafixer_queue.in_progress = store list of videos under process"
 	echo "   [q-path/]prefix]mediafixer_queue.leftovers   = list of temporary files that you should delete"
+	echo "   [q-path/]prefix]mediafixer_queue.ignored     = list of videos that will be ignored"
 	echo " Upon start, if the in_progress queue is not empty, it will be used without re-scanning"
 	echo " all the videos. If you want to force a full rescan, use the -f option."
 }
@@ -524,29 +540,44 @@ then
 		then
 			if [ ${ONLY_DELETE_OLD_TEMP} -eq 0 ]
 			then
-				result=0
-				change_container=0
-				encode=0
-				resize=0
-				preprocess_video_file "${line}"
-	
-				# Move file to appropriate new queue
-				if [ $result -eq 0 ]
+				found=0
+				is_in_queue "${queue_file}".ignored "${line}"
+				if [ $found -eq 0 ]
 				then
-					print_log "Video '${line}' added to failed queue"
-					echo ${line} >> "${queue_file}".failed
-				elif [ $result -eq 2 ]
-				then
-					print_log "Video '${line}' added to skipped queue"
-					echo ${line} >> "${queue_file}".skipped
-				elif [ $result -eq 1 ]
-				then
-					print_log "Video '${line}' added to processing queue (${change_container} ${encode} ${resize})"
-					echo "${line}|||| ${change_container} ${encode} ${resize}" >> "${queue_file}".in_progress
+					found=0
+					is_in_queue "${queue_file}".failed "${line}"
+
+					if [ $found -eq 0 ]
+					then
+						result=0
+						change_container=0
+						encode=0
+						resize=0
+						preprocess_video_file "${line}"
+
+						# Move file to appropriate new queue
+						if [ $result -eq 0 ]
+						then
+							print_log "Video '${line}' added to failed queue"
+							echo ${line} >> "${queue_file}".failed
+						elif [ $result -eq 2 ]
+						then
+							print_log "Video '${line}' added to skipped queue"
+							echo ${line} >> "${queue_file}".skipped
+						elif [ $result -eq 1 ]
+						then
+							print_log "Video '${line}' added to processing queue (${change_container} ${encode} ${resize})"
+							echo "${line}|||| ${change_container} ${encode} ${resize}" >> "${queue_file}".in_progress
+						else
+							print_error "Invalid value of '$result' in result!"
+						fi # result
+					else
+						print_log "Video '${line}' ignored because it's in the 'failed' list"
+					fi # is in failed queue
 				else
-					print_error "Invalid value of '$result' in result!"
-				fi
-			fi
+					print_log "Video '${line}' ignored because it's in the 'ignored' list"
+				fi # is in ignored queue
+			fi # delete old temp only
 		else
 			if [ ${DELETE_OLD_TEMP} -eq 0 ]
 			then
@@ -663,6 +694,12 @@ do
 					fi
 				fi # encore or resize
 			fi # error = 0
+
+			if [ -e "${gc_filename}" ]
+			then
+				print_notice "Removing temporary file due to previous errors..."
+				exec_command "${RM_EXE}" -f "${intermediate_filename}"
+			fi
 
 			# Needed to properly go to the next line since all last prints are without newline
 			print_notice " "
