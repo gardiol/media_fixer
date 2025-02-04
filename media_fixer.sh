@@ -522,7 +522,7 @@ if [ ${create_queue} -eq 1 ]
 then
 	# Scan for old temp file Scan folders / subfolders to find video files...
 	print_notice "Building video queues, this can take a while, be patient..."
-	for j in skipped failed completed in_progress temp leftovers
+	for j in skipped failed completed in_progress temp leftovers ignored
 	do
 		echo -n > "${queue_file}".${j}
 	done
