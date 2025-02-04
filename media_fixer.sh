@@ -728,7 +728,7 @@ do
 					exec_command "${RM_EXE}" -f "${gc_filename}"
 				fi
 			else
-				print_error "Missing gc file '${working_filename}', something went wrong!"
+				print_error "Missing gc file '${gc_filename}', something went wrong!"
 			fi
 			cd "$my_cwd"
 		else
