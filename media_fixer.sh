@@ -695,24 +695,21 @@ do
 				fi # encore or resize
 			fi # error = 0
 
-			if [ -e "${gc_filename}" ]
-			then
-				print_notice "Removing temporary file due to previous errors..."
-				exec_command "${RM_EXE}" -f "${intermediate_filename}"
-			fi
-
 			# Needed to properly go to the next line since all last prints are without newline
 			print_notice " "
 
-			if [ $error -eq 0 ]
+			# however we got here, failed or not failed, ${intermediate_filename} has been deleted / replaced at this point.
+			# We __should__ have ${gc_filename} tough. This is expected.
+			if [ -e "${gc_filename}" ]
 			then
-				if [ -e "${gc_filename}" ]
+				if [ $error -eq 0 ]
 				then
 					destination_filename="${stripped_filename}.${CONTAINER_EXTENSION}"
 					print_log "Moving final product from '${gc_filename}' to '${destination_filename}'..."
 					exec_command "${MV_EXE}" "${gc_filename}" "${destination_filename}"
 					if [ $? -eq 0 ]
 					then
+						# ${gc_filename} doesnt exist anymore at this point.
 						result=1
 						if [ "${filename}" != "${destination_filename}" ]
 						then
@@ -723,18 +720,20 @@ do
 						fi
 					else
 						print_error "Unable to move converted file, not deleting original."
+						exec_command "${RM_EXE}" -f "${gc_filename}"
 					fi
 				else
-					print_error "Missing gc file '${working_filename}', something went wrong!"
+					print_error "Something went wrong in conversion."
+					print_notice "Removing temporary file due to previous errors..."
+					exec_command "${RM_EXE}" -f "${gc_filename}"
 				fi
 			else
-				print_error "Something went wrong in conversion."
+				print_error "Missing gc file '${working_filename}', something went wrong!"
 			fi
 			cd "$my_cwd"
 		else
 			print_error "Unable to cd to '${filepath}'"
 		fi 
-		
 	else
 		print_notice "Nothing to do (!?!?)"
 	fi # change container or encode
