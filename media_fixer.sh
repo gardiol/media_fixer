@@ -215,7 +215,7 @@ function parse_mediainfo_output
 		then
 			test "$line" = "$section" && section_found=1
 		else
-			if [ -z "$line" ]
+			if [ "$line" = "" ]
 			then
 				return 255
 			else
